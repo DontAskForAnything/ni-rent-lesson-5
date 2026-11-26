@@ -1,4 +1,7 @@
-from src.models import Apartment, ApartmentSettlement, Bill, Parameters, Tenant, Transfer
+import calendar
+from datetime import date
+
+from src.models import Apartment, ApartmentSettlement, Bill, Parameters, Tenant, TenantSettlement, Transfer
 
 
 class Manager:
@@ -56,3 +59,35 @@ class Manager:
             total_bills_pln=total_bills,
             total_due_pln=total_transfers - total_bills,
         )
+
+    def get_current_tenants(self, apartment_key: str, year: int, month: int) -> dict[str, Tenant]:
+        month_start = date(year, month, 1)
+        month_end = date(year, month, calendar.monthrange(year, month)[1])
+        return {
+            key: tenant for key, tenant in self.tenants.items()
+            if tenant.apartment == apartment_key
+            and date.fromisoformat(tenant.date_agreement_from) <= month_end
+            and date.fromisoformat(tenant.date_agreement_to) >= month_start
+        }
+
+    def create_tenant_settlements(self, apartment_settlement: ApartmentSettlement) -> list[TenantSettlement]:
+        tenants = self.get_current_tenants(
+            apartment_settlement.apartment, apartment_settlement.year, apartment_settlement.month
+        )
+        if not tenants:
+            return []
+        bills_share = apartment_settlement.total_bills_pln / len(tenants)
+        rent_share = 0.0  # transfers will be included in a later step
+        return [
+            TenantSettlement(
+                tenant=tenant_key,
+                apartment_settlement=apartment_settlement.apartment,
+                year=apartment_settlement.year,
+                month=apartment_settlement.month,
+                rent_pln=rent_share,
+                bills_pln=bills_share,
+                total_due_pln=rent_share - bills_share,
+                balance_pln=rent_share - bills_share,
+            )
+            for tenant_key in tenants
+        ]
