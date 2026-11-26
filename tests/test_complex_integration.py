@@ -2,7 +2,7 @@ import pytest
 
 from src.manager import Manager
 from src.models import Parameters
-from src.models import Bill
+from src.models import Bill, ApartmentSettlement
 
 
 def test_apartment_costs_nonexistent_apartment():
@@ -115,3 +115,42 @@ def test_apartment_costs_boundary_months_are_valid():
     manager = Manager(Parameters())
     assert manager.get_apartment_costs('apart-polanka', 2025, 1) == 910.0
     assert manager.get_apartment_costs('apart-polanka', 2025, 12) == 0.0
+
+
+def test_create_apartment_settlement():
+    manager = Manager(Parameters())
+    manager.bills.append(Bill(
+        apartment='apart-polanka',
+        date_due='2025-03-15',
+        settlement_year=2025,
+        settlement_month=2,
+        amount_pln=1250.0,
+        type='rent'
+    ))
+
+    # apartment with bills in the given month
+    settlement = manager.create_apartment_settlement('apart-polanka', 2025, 1)
+    assert isinstance(settlement, ApartmentSettlement)
+    assert settlement.apartment == 'apart-polanka'
+    assert settlement.year == 2025
+    assert settlement.month == 1
+    assert settlement.total_bills_pln == 910.0
+    assert settlement.total_rent_pln == 0.0  # transfers not included yet
+    assert settlement.total_due_pln == -910.0  # balance = transfers - bills
+
+    settlement = manager.create_apartment_settlement('apart-polanka', 2025, 2)
+    assert settlement.month == 2
+    assert settlement.total_bills_pln == 1250.0
+    assert settlement.total_due_pln == -1250.0
+
+    # apartment without bills in the given month
+    settlement = manager.create_apartment_settlement('apart-polanka', 2024, 6)
+    assert isinstance(settlement, ApartmentSettlement)
+    assert settlement.apartment == 'apart-polanka'
+    assert settlement.year == 2024
+    assert settlement.month == 6
+    assert settlement.total_bills_pln == 0.0
+    assert settlement.total_due_pln == 0.0
+
+    # nonexistent apartment
+    assert manager.create_apartment_settlement('apart-nonexistent', 2025, 1) is None
